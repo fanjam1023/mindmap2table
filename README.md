@@ -1,5 +1,7 @@
 # 脑图转嵌套表格 · MindMap to Table
 
+[![GitHub](https://img.shields.io/badge/github-mindmap2table-25A0FB?logo=github)](https://github.com/fanjam1023/mindmap2table) [![GitHub Release](https://img.shields.io/github/v/release/fanjam1023/mindmap2table?include_prereleases)](https://github.com/fanjam1023/mindmap2table/releases)
+
 将 MarginNote 脑图整理为可阅读、调整和保存的嵌套表格。
 
 **当前版本：4.2.0 测试版。** 自动测试已通过，真实卡片、复杂格式及交互仍需实际使用验证。
