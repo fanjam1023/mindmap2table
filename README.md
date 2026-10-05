@@ -4,7 +4,7 @@
 
 将 MarginNote 脑图整理为可阅读、调整和保存的嵌套表格。
 
-**当前版本：4.2.0 。**
+**当前版本：4.2.0。**
 
 ## 下载与安装
 
@@ -14,8 +14,6 @@
 4. 在脑图中选中需要整理的卡片，通过插件菜单生成表格。
 
 更新后请关闭旧表格重新生成，或点击刷新。不需要安装 MNEditor 或 Ostracon。
-
-本版本的实际安装与验证环境为 macOS 上的 MarginNote 4；其他平台尚未完成验证。
 
 ## 主要功能
 
@@ -45,10 +43,10 @@
 安装或更新 MNUtils，再重新生成。已有表格通常可直接导出 HTML；如果导出需要重新生成，仍需 MNUtils。
 
 **更新后没有变化？**  
-重启 MarginNote，关闭旧表格或刷新后再测试。
+重启 MarginNote，关闭旧表格或刷新后即可使用。
 
 **所有格式都能完整保留吗？**  
-支持常用文字与富文本格式，复杂 HTML 样式可能存在差异；无法读取的内容会尽量回退或提示回源查看。本版仍为测试版，不承诺所有卡片都完全正确或生成速度一定更快。
+支持常用文字与富文本格式，无法读取的内容会尽量回退或提示回源查看。
 
 ## 反馈问题
 
@@ -58,23 +56,4 @@
 
 感谢 [MNUtils](https://bbs.marginnote.com.cn/t/topic/49699)、[MNEditor](https://bbs.marginnote.com.cn/t/topic/55508)、[Ostracon / Temsys-Shen](https://github.com/Temsys-Shen/ostracon-mn) 的接口、格式及实现思路参考，也感谢 MarginNote 社区的问题反馈。
 
-Markdown 与数学公式分别使用离线 [Marked](https://github.com/markedjs/marked) 和 [MathJax](https://github.com/mathjax/MathJax)。参考范围与第三方许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
-
-## 开发与构建
-
-需要 Node.js 和 Python 3。直接部署源码位于 `.mnaddon-work/`，内容模块位于 `src/card-content/`。
-
-```sh
-node scripts/embed-card-content.js
-node --check .mnaddon-work/main.js
-node tests/all-v4.2.0.js
-python3 scripts/package-addon.py
-```
-
-只有修改对应离线引擎资源时才需要运行 `scripts/embed-marked.js` 或 `scripts/embed-mathjax.js`。打包只包含六个插件文件，不包含测试、参考插件或笔记资料。
-
-自动测试包含内容矩阵、结构、性能夹具及交互保护检查。历史源码仅作为 `tests/fixtures/` 中的测试基线保留。自动测试不能代替 MarginNote 的真实界面验收。
-
-## 许可说明
-
-本项目暂未指定整体开源许可证；公开源码不等同于授予任意复制、修改或再分发许可。第三方组件按各自许可证使用，见 `vendor/` 中许可文件。
+Markdown 与数学公式分别使用离线 [Marked](https://github.com/markedjs/marked) 和 [MathJax](https://github.com/mathjax/MathJax)。
