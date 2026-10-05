@@ -1,0 +1,17 @@
+const fs = require('fs');
+const path = require('path');
+const root = path.resolve(__dirname,'..');
+const file = path.join(root,'.mnaddon-work/main.js');
+const start = '// BUNDLED_CARD_CONTENT_4_2_0_START';
+const end = '// BUNDLED_CARD_CONTENT_4_2_0_END';
+const bundle = start+'\n'+['structure','model','html'].map(name=>fs.readFileSync(path.join(root,'src/card-content',name+'.js'),'utf8')).join('\n')+'\n'+end+'\n';
+let source=fs.readFileSync(file,'utf8');
+if(source.includes(start)) source=source.slice(0,source.indexOf(start))+bundle+source.slice(source.indexOf(end)+end.length).replace(/^\n/,'');
+else source=source.replace('JSB.newAddon = function (mainPath) {',bundle+'\nJSB.newAddon = function (mainPath) {');
+const adapterStart = '    // BUNDLED_CARD_NATIVE_ADAPTER_START';
+const adapterEnd = '    // BUNDLED_CARD_NATIVE_ADAPTER_END';
+const adapter = fs.readFileSync(path.join(root,'src/card-content/native-adapter.js'),'utf8');
+const a = source.indexOf(adapterStart), b = source.indexOf(adapterEnd,a);
+if (a < 0 || b < 0) throw Error('native adapter build markers missing');
+source = source.slice(0,a) + adapterStart+'\n'+adapter+adapterEnd+'\n'+source.slice(b+adapterEnd.length).replace(/^\n/,'');
+fs.writeFileSync(file,source);
