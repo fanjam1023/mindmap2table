@@ -1,8 +1,8 @@
 {
     "addonid": "marginnote.extension.mindmap2table",
     "author": "momo",
-    "title": "脑图转嵌套表格_v4.2.1",
-    "version": "4.2.1",
+    "title": "脑图转嵌套表格_v4.2.2",
+    "version": "4.2.2",
     "marginnote_version_min": "3.6.11",
     "cert_key": ""
 }

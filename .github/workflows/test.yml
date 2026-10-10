@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: '3.x'
       - run: node --check .mnaddon-work/main.js
-      - run: node tests/all-v4.2.1.js
+      - run: node tests/all-v4.2.2.js
       - run: python3 scripts/package-addon.py
       - uses: actions/upload-artifact@v4
         with:

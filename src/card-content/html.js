@@ -115,7 +115,16 @@ var MomoCardHtml = (function () {
             if (isComment !== commentsOnly) return;
             try {
                 if (block.kind === 'image') {
-                    parts.push('<div class="resize-img-container"><img data-paint="'+escape(block.hash)+'" src="data:'+escape(block.mime)+';base64,'+escape(block.value)+'"'+(api.imageStyle(block.hash) || imageStyle || '')+'/><div class="img-resizer"></div></div>');
+                    var imageUrl = 'data:'+block.mime+';base64,'+block.value;
+                    if (block.layers && block.layers.length && block.width > 0 && block.height > 0) {
+                        // One self-contained image keeps ink aligned during resizing and HTML export.
+                        var svg = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="'+Number(block.width)+'" height="'+Number(block.height)+'" viewBox="0 0 '+Number(block.width)+' '+Number(block.height)+'">';
+                        [imageUrl].concat(block.layers.map(function (layer) { return 'data:'+layer.mime+';base64,'+layer.base64; })).forEach(function (url) {
+                            svg += '<image width="100%" height="100%" preserveAspectRatio="none" xlink:href="'+escape(url)+'"/>';
+                        });
+                        imageUrl = 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg+'</svg>');
+                    }
+                    parts.push('<div class="resize-img-container"><img data-paint="'+escape(block.hash)+'" src="'+escape(imageUrl)+'"'+(api.imageStyle(block.hash) || imageStyle || '')+'/><div class="img-resizer"></div></div>');
                 } else if (block.kind === 'unsupported') {
                     parts.push('<div class="note-excerpt comment-read-error">'+escape(block.value)+'</div>');
                 } else {

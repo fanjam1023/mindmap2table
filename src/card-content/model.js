@@ -17,7 +17,9 @@ var MomoCardModel = (function () {
             try { result = api.image(note, hash); }
             catch (error) { model.warnings.push('图片读取失败，请回源查看'); return false; }
             if (!result || !result.base64) return false;
-            block('image', result.base64, source, {hash: result.hash || hash || '', mime: result.mime});
+            if (result.warning) model.warnings.push(result.warning);
+            block('image', result.base64, source, {hash: result.hash || hash || '', mime: result.mime,
+                layers: result.layers, width: result.width, height: result.height});
             return true;
         }
         function safe(source, fn) {

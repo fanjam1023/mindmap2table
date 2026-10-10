@@ -129,7 +129,9 @@ var MomoCardModel = (function () {
             try { result = api.image(note, hash); }
             catch (error) { model.warnings.push('图片读取失败，请回源查看'); return false; }
             if (!result || !result.base64) return false;
-            block('image', result.base64, source, {hash: result.hash || hash || '', mime: result.mime});
+            if (result.warning) model.warnings.push(result.warning);
+            block('image', result.base64, source, {hash: result.hash || hash || '', mime: result.mime,
+                layers: result.layers, width: result.width, height: result.height});
             return true;
         }
         function safe(source, fn) {
@@ -324,7 +326,16 @@ var MomoCardHtml = (function () {
             if (isComment !== commentsOnly) return;
             try {
                 if (block.kind === 'image') {
-                    parts.push('<div class="resize-img-container"><img data-paint="'+escape(block.hash)+'" src="data:'+escape(block.mime)+';base64,'+escape(block.value)+'"'+(api.imageStyle(block.hash) || imageStyle || '')+'/><div class="img-resizer"></div></div>');
+                    var imageUrl = 'data:'+block.mime+';base64,'+block.value;
+                    if (block.layers && block.layers.length && block.width > 0 && block.height > 0) {
+                        // One self-contained image keeps ink aligned during resizing and HTML export.
+                        var svg = '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="'+Number(block.width)+'" height="'+Number(block.height)+'" viewBox="0 0 '+Number(block.width)+' '+Number(block.height)+'">';
+                        [imageUrl].concat(block.layers.map(function (layer) { return 'data:'+layer.mime+';base64,'+layer.base64; })).forEach(function (url) {
+                            svg += '<image width="100%" height="100%" preserveAspectRatio="none" xlink:href="'+escape(url)+'"/>';
+                        });
+                        imageUrl = 'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg+'</svg>');
+                    }
+                    parts.push('<div class="resize-img-container"><img data-paint="'+escape(block.hash)+'" src="'+escape(imageUrl)+'"'+(api.imageStyle(block.hash) || imageStyle || '')+'/><div class="img-resizer"></div></div>');
                 } else if (block.kind === 'unsupported') {
                     parts.push('<div class="note-excerpt comment-read-error">'+escape(block.value)+'</div>');
                 } else {
@@ -2253,6 +2264,40 @@ JSB.newAddon = function (mainPath) {
 
     function cardField(value, key) { return readCommentField(value, key); }
     // BUNDLED_CARD_NATIVE_ADAPTER_START
+    function cardDrawingHash(note, paint) {
+        var current = note, seen = [];
+        for (var i = 0; current && i < 8; i++) {
+            var id = String(cardField(current, 'noteId') || '');
+            if (id && seen.indexOf(id) >= 0) break;
+            if (id) seen.push(id);
+            var pic = cardField(current, 'excerptPic');
+            // A reference may cache the base picture without the source's drawing.
+            // Only inherit ink from the exact same excerpt, never from a group card.
+            if (pic && readMediaHash(pic) === paint) {
+                var drawing = readMediaHash(cardField(pic, 'drawing'));
+                if (drawing) return drawing;
+            }
+            var origin = cardField(current, 'originNoteId');
+            if (!origin) break;
+            current = taskDatabaseNote(String(origin));
+        }
+        return '';
+    }
+
+    function cardPngSize(encoded) {
+        if (String(encoded).indexOf('iVBOR') !== 0) return null;
+        var alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/', bytes = [], bits = 0, count = 0;
+        for (var i = 0; i < 32; i++) {
+            var value = alphabet.indexOf(encoded.charAt(i));
+            if (value < 0) return null;
+            bits = (bits << 6) | value; count += 6;
+            if (count >= 8) { count -= 8; bytes.push((bits >>> count) & 255); }
+        }
+        function number(offset) { return bytes[offset] * 16777216 + bytes[offset + 1] * 65536 + bytes[offset + 2] * 256 + bytes[offset + 3]; }
+        var width = number(16), height = number(20);
+        return width > 0 && height > 0 ? {width:width,height:height} : null;
+    }
+
     function cardReadApi() { return {
                 field: cardField, title: function (note) { return getExplicitNoteTitle(note.__baseNote || note.__nativeNote || note); }, comments: getNoteComments,
                 blank: hasBlankHighlightMarker, textFirst: function (note) {
@@ -2268,7 +2313,20 @@ JSB.newAddon = function (mainPath) {
                 image: function (note, hash) {
                     var result = note ? getNodeMediaResult(note, hash) : {data:getImageMediaData(hash),hash:hash};
                     var data = result && result.data, encoded = data ? encodeMedia(data) : '';
-                    return encoded ? {base64:encoded,hash:result.hash || hash || '',mime:getImageMimeType(encoded)} : null;
+                    if (!encoded) return null;
+                    var output = {base64:encoded,hash:result.hash || hash || '',mime:getImageMimeType(encoded)};
+                    try { if (note && output.hash) {
+                        var drawingHash = cardDrawingHash(note, output.hash);
+                        if (drawingHash && drawingHash !== output.hash) {
+                            var ink = getImageMediaData(drawingHash), inkEncoded = ink ? encodeMedia(ink) : '';
+                            var size = cardPngSize(encoded) || cardPngSize(inkEncoded);
+                            if (inkEncoded && size) {
+                                output.layers = [{base64:inkEncoded,mime:getImageMimeType(inkEncoded)}];
+                                output.width = size.width; output.height = size.height;
+                            } else output.warning = '手写笔记无法读取，请回源查看';
+                        }
+                    } } catch (drawingError) { output.warning = '手写笔记无法读取，请回源查看'; }
+                    return output;
                 }
             }; }
     // BUNDLED_CARD_NATIVE_ADAPTER_END

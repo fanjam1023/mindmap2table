@@ -4,12 +4,12 @@
 
 将 MarginNote 脑图整理为可阅读、调整和保存的嵌套表格。
 
-**当前版本：4.2.1。**
+**当前版本：4.2.2。**
 
 ## 下载与安装
 
 1. 先安装或更新 [MNUtils](https://bbs.marginnote.com.cn/t/topic/49699)。本插件生成与刷新表格需要它提供的卡片读取支持。
-2. 打开本仓库的 [Releases](https://github.com/fanjam1023/mindmap2table/releases)，下载 `mindmap2table-v4.2.1.mnaddon`。不要下载 Source code 作为安装包。
+2. 打开本仓库的 [Releases](https://github.com/fanjam1023/mindmap2table/releases)，下载 `mindmap2table-v4.2.2.mnaddon`。不要下载 Source code 作为安装包。
 3. 使用 MarginNote 打开安装包，按应用提示安装插件，然后重启 MarginNote。
 4. 在脑图中选中需要整理的卡片，通过插件菜单生成表格。
 
@@ -24,6 +24,11 @@
 - 调整列宽、图片尺寸、浮窗大小和字号；保存与恢复图表库。
 - 分批生成、阶段进度与取消，生成失败时保护已有结果。
 - 单表及批量导出 HTML。Markdown 与公式引擎离线提供。
+
+## 4.2.2 更新
+
+- 修复图片摘录中的手写笔记遗漏，引用卡片也会保留对应原始摘录的手写标记。
+- 手写标记随原图一起缩放，并保留在导出的 HTML 中。
 
 ## 4.2.1 更新
 
