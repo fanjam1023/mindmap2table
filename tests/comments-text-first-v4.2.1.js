@@ -60,12 +60,12 @@ for (const mode of ['merge','titlecontent']) for (const child of [false,true]) {
   assert.strictEqual(task.metrics.imageReads,1,'text excerpts read image caches');
   assert.strictEqual(task.metrics.encodeCalls,1,'text excerpts encoded images');
 }
-// No change outside the bundled content model and native adapter.
+// Colour CSS/builders and the toolbar preference were explicitly added in 4.2.3/4.2.4; retain a fixed guard for all other production code.
 const current=fs.readFileSync(path.join(__dirname,'../.mnaddon-work/main.js'),'utf8');
 function outsideContent(source) {
   return source.replace(/\/\/ BUNDLED_CARD_CONTENT_4_2_0_START[\s\S]*?\/\/ BUNDLED_CARD_CONTENT_4_2_0_END/,'CONTENT')
     .replace(/\/\/ BUNDLED_CARD_NATIVE_ADAPTER_START[\s\S]*?\/\/ BUNDLED_CARD_NATIVE_ADAPTER_END/,'ADAPTER');
 }
-const baselineOutsideHash='bd913c4a7d0b351db8946c8b8d2bc732a0201950b56dc100bfc69003d2f58a50';
+const baselineOutsideHash='4f86b0e941fa0771490138463a6dd64e388ae2fc7208c1422284a87921430e5a';
 assert.strictEqual(crypto.createHash('sha256').update(outsideContent(current)).digest('hex'),baselineOutsideHash,'unrelated production code changed');
 console.log('4.2.1 merged excerpt text preference: PASS (per-comment flags, native/JSON, text fallback, image preservation, order, both modes/root/child, batched output, zero needless image work, unchanged interaction/export)');

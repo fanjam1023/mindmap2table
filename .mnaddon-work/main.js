@@ -2052,7 +2052,8 @@ JSB.newAddon = function (mainPath) {
         html += '<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">';
         html += '<style>';
         html += ':root { --table-font-scale: 1; --table-title-font-size:16px; --table-text-font-size:15px; --table-merge-title-font-size:17px; --table-merge-text-font-size:16px; --table-section-font-size:17px; --table-compact-section-font-size:16px; --table-markdown-font-size:12px; --table-breadcrumb-font-size:10px; }';
-        html += '@keyframes highlightEffect { 0% { background-color: #fef08a; } 100% { background-color: white; } }';
+        html += '@keyframes highlightEffect { 0% { background-color: #fef08a; } 100% { background-color: var(--card-background,white); } }';
+        html += '.hide-card-colors [style*="--card-background:"] { --card-background:white !important; }';
         html += '.highlight-target { animation: highlightEffect 2s ease-out; }';
         html += 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; padding: 10px; margin: 0; background-color: white; }';
         // V2.5.7: Revert to Auto Layout for Resize Support, Keep Min-Width 15px
@@ -2074,7 +2075,7 @@ JSB.newAddon = function (mainPath) {
         html += '.merge-mode-table td { padding: 12px 15px !important; }';
 
         html += 'td a { text-decoration: none; display: block; height: 100%; color: inherit; -webkit-tap-highlight-color: transparent; }';
-        html += '.sticky-content { position: sticky; top: 0; display: block; height: max-content; z-index: 10; text-decoration: none; color: inherit; background-color: white; padding: 2px; border-radius: 0 !important; box-shadow: none !important; }';
+        html += '.sticky-content { position: sticky; top: 0; display: block; height: max-content; z-index: 10; text-decoration: none; color: inherit; background-color: var(--card-background,white); padding: 2px; border-radius: 0 !important; box-shadow: none !important; }';
         html += 'td:hover { background-color: #f7fafc; }';
         html += 'td:hover .sticky-content { border-color: transparent; box-shadow: none !important; }';
         html += '.note-title { font-weight: 600; color: #1f2328; font-size: var(--table-title-font-size) !important; display: block; line-height: 1.4; margin-bottom: 8px; }';
@@ -2133,6 +2134,7 @@ JSB.newAddon = function (mainPath) {
         html += '.math-inline svg, .math-block svg { max-width:none !important; }';
         html += '.math-error { color:#b91c1c; font-family:"SFMono-Regular",monospace; white-space:pre-wrap; }';
         html += '@media print { ';
+        html += '  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; } ';
         html += '  .fold-btn, .row-fold-btn, .resizer, .img-resizer { display: none !important; } ';
         html += '  .sticky-content { position: static !important; } ';
         html += '  body:not(.hide-breadcrumb) .print-breadcrumb { display: block !important; font-size: var(--table-breadcrumb-font-size); color: gray !important; margin-bottom: 5px; border-bottom: 1px dashed #eee; padding-bottom: 2px; } ';
@@ -2151,6 +2153,7 @@ JSB.newAddon = function (mainPath) {
         var bodyCls = '';
         if (isCompact) bodyCls += ' compact-theme';
         if (self && self.showBreadcrumb === false) bodyCls += ' hide-breadcrumb';
+        if (self && self.isCardColorEnabled === false) bodyCls += ' hide-card-colors';
         html += '</style></head><body' + (bodyCls ? ' class="' + bodyCls.trim() + '"' : '') + '>';
 
         return { js: js, prefix: html };
@@ -2264,6 +2267,45 @@ JSB.newAddon = function (mainPath) {
 
     function cardField(value, key) { return readCommentField(value, key); }
     // BUNDLED_CARD_NATIVE_ADAPTER_START
+    // Card colours belong to the selected card, never its excerpt/Sketch source.
+    // Resolve the notebook palette through MNUtils to preserve custom colours.
+    function cardMutedColor(hex) {
+        hex = String(hex || '');
+        if (!/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(hex)) return '';
+        var alpha = hex.length === 9 ? parseInt(hex.slice(7,9),16) / 255 : 1;
+        var rgb = [1,3,5].map(function (offset) { return (parseInt(hex.slice(offset,offset+2),16) * alpha + 255 * (1-alpha)) / 255; });
+        var max = Math.max.apply(null,rgb), min = Math.min.apply(null,rgb), delta = max-min;
+        var light = (max+min)/2, saturation = delta ? delta / (1-Math.abs(2*light-1)) : 0, hue = 0;
+        if (delta) {
+            if (max === rgb[0]) hue = ((rgb[1]-rgb[2])/delta + 6) % 6;
+            else if (max === rgb[1]) hue = (rgb[2]-rgb[0])/delta + 2;
+            else hue = (rgb[0]-rgb[1])/delta + 4;
+        }
+        // Uniform 50% saturation reduction, with a light floor for dark colours.
+        saturation *= 0.5; light = Math.max(0.95,light);
+        var chroma = (1-Math.abs(2*light-1))*saturation, x = chroma*(1-Math.abs(hue%2-1)), m = light-chroma/2;
+        var channels = hue < 1 ? [chroma,x,0] : hue < 2 ? [x,chroma,0] : hue < 3 ? [0,chroma,x] : hue < 4 ? [0,x,chroma] : hue < 5 ? [x,0,chroma] : [chroma,0,x];
+        return '#' + channels.map(function (value) { var part = Math.round((value+m)*255).toString(16); return part.length < 2 ? '0'+part : part; }).join('');
+    }
+
+    function cardColorStyle(position) {
+        var note = position && (position.__sourceNote || position.__baseNote || position);
+        var index = cardField(note,'colorIndex'), notebookId = String(cardField(note,'notebookId') || '');
+        // Zero is the first colour; missing/negative indices must not borrow a parent's colour.
+        if (index === null || index === undefined || index === '' || !isFinite(Number(index)) || Number(index) < 0 || Number(index) > 15 || Math.floor(Number(index)) !== Number(index)) return '--card-background:initial;';
+        var read = function () {
+            try {
+                if (typeof MNUtil === 'undefined') return '';
+                var hex = '';
+                if (notebookId && typeof MNUtil.noteColorByNotebookIdAndColorIndex === 'function') hex = MNUtil.noteColorByNotebookIdAndColorIndex(notebookId,Number(index));
+                else if (MNUtil.defaultNoteColors) hex = MNUtil.defaultNoteColors[Number(index)];
+                return cardMutedColor(hex);
+            } catch (ignored) { return ''; }
+        };
+        var color = activeRenderTask ? taskMemo('cardColor',notebookId+':'+index,read) : read();
+        return color ? '--card-background:'+color+';background-color:var(--card-background);' : '--card-background:initial;';
+    }
+
     function cardDrawingHash(note, paint) {
         var current = note, seen = [];
         for (var i = 0; current && i < 8; i++) {
@@ -2444,12 +2486,13 @@ JSB.newAddon = function (mainPath) {
         for (var idx = 0; idx < rootNotes.length; idx++) {
             var rootNote = rootNotes[idx];
             var rootModel = getCardContentModel(rootNote);
+            var rootColorStyle = cardColorStyle(rootNote);
             var rootComments = getNoteComments(rootNote);
             var rootChildren = getNoteChildren(rootNote);
             var rawTitle = getExplicitNoteTitle(rootNote);
 
             if (rawTitle) {
-                html += '<div class="section-header">';
+                html += '<div class="section-header"' + (rootColorStyle === '--card-background:initial;' ? '' : ' style="' + rootColorStyle + '"') + '>';
                 // V3.2.2: Use <a> with data-nodeid to enable bi-link focusing
                 html += '<a data-nodeid="' + rootNote.noteId + '" style="cursor:pointer; color:inherit; text-decoration:none; display:inline-block; flex:1;">' + renderInlineMarkdown(rawTitle) + '</a>';
                 html += '<button class="fold-btn" onclick="toggleSection(this)">▼</button>';
@@ -2466,7 +2509,7 @@ JSB.newAddon = function (mainPath) {
             if (rootHasContent) {
                 // V3.2.2: Wrap content area in <a> for bi-link support
                 var rootBorderTop = rawTitle ? 'none' : '1px solid #94a3b8';
-                html += '<a data-nodeid="' + rootNote.noteId + '" style="display:block; text-decoration:none; color:inherit; padding: 10px 15px; margin-bottom: 2px; background: #fff; border: 1px solid #94a3b8; border-top: ' + rootBorderTop + '; border-radius: 0 !important;">';
+                html += '<a data-nodeid="' + rootNote.noteId + '" style="display:block; text-decoration:none; color:inherit; padding: 10px 15px; margin-bottom: 2px; background: #fff; border: 1px solid #94a3b8; border-top: ' + rootBorderTop + '; border-radius: 0 !important;' + rootColorStyle + '">';
 
                 var savedImgStyleRoot = "";
                 var epaintRoot = getNodePicHash(rootNote);
@@ -2485,6 +2528,7 @@ JSB.newAddon = function (mainPath) {
                 if (buildContext) buildContext.entering = false;
                 if (!n || depth > MAX_NOTE_TREE_DEPTH || isNoteInPath(n, path)) return '';
                 var nodeModel = getCardContentModel(n);
+                var nodeColorStyle = cardColorStyle(n);
                 if (!n || isNoteInPath(n, path)) return '';
                 var newPath = (path || []).slice();
                 newPath.push(n);
@@ -2535,14 +2579,14 @@ JSB.newAddon = function (mainPath) {
 
                 if (hasTitle && !hasContent && !hasChild) {
                     // 只有标题
-                    htmlStr += '<td data-depth="' + depth + '" data-nodeid="' + cid + '" colspan="2" style="' + persistentWidthStyle + ' vertical-align:top; border:1px solid #94a3b8; background:#f0f7ff; padding:6px; border-radius:0 !important;">';
-                    htmlStr += '<a class="sticky-content" style="cursor: pointer; background:#f0f7ff; padding:0; border-radius:0 !important;" data-nodeid="' + cid + '">';
+                    htmlStr += '<td data-depth="' + depth + '" data-nodeid="' + cid + '" colspan="2" style="' + persistentWidthStyle + ' vertical-align:top; border:1px solid #94a3b8; background:#f0f7ff; padding:6px; border-radius:0 !important;' + nodeColorStyle + '">';
+                    htmlStr += '<a class="sticky-content" style="cursor: pointer; background:var(--card-background,#f0f7ff); padding:0; border-radius:0 !important;" data-nodeid="' + cid + '">';
                     if (bc) htmlStr += bc;
                     htmlStr += '<div class="note-title" style="font-size: 15px; margin-bottom: 4px;">' + renderInlineMarkdown(displayTitle) + '</div>';
                     htmlStr += '</a></td>';
                 } else if (!hasTitle && hasContent) {
                     if (hasChild) {
-                        htmlStr += '<td data-depth="' + depth + '" data-nodeid="' + cid + '" style="' + persistentWidthStyle + ' vertical-align:top; border:1px solid #94a3b8; padding:6px; background:white;">';
+                        htmlStr += '<td data-depth="' + depth + '" data-nodeid="' + cid + '" style="' + persistentWidthStyle + ' vertical-align:top; border:1px solid #94a3b8; padding:6px; background:white;' + nodeColorStyle + '">';
                         htmlStr += '<a class="sticky-content" style="cursor: pointer; position:static;" data-nodeid="' + cid + '">';
                         if (bc) htmlStr += bc;
                         htmlStr += '<button class="row-fold-btn" onclick="toggleChildRows(this)">▼</button>';
@@ -2565,7 +2609,7 @@ JSB.newAddon = function (mainPath) {
                         htmlStr += '</div></td>';
                     } else {
                         // 只有内容，无下级 -> colspan 全宽
-                        htmlStr += '<td colspan="2" style="vertical-align:top; border:1px solid #94a3b8; padding:6px; background:white;">';
+                        htmlStr += '<td colspan="2" style="vertical-align:top; border:1px solid #94a3b8; padding:6px; background:white;' + nodeColorStyle + '">';
                         htmlStr += '<a class="sticky-content" style="cursor: pointer; position:static;" data-nodeid="' + cid + '">';
                         if (bc) htmlStr += bc;
                         htmlStr += '<button class="row-fold-btn" onclick="toggleChildRows(this)">▼</button>';
@@ -2583,8 +2627,8 @@ JSB.newAddon = function (mainPath) {
                     }
                 } else {
                     // V5 Fix: use persistentWidthStyle (savedWidthMap) instead of always-recalculated relativePct
-                    htmlStr += '<td data-depth="' + depth + '" data-nodeid="' + cid + '" style="' + persistentWidthStyle + ' vertical-align:top; border:1px solid #94a3b8; background:#f0f7ff; padding:6px; border-radius:0 !important;">';
-                    htmlStr += '<a class="sticky-content" style="cursor: pointer; background:#f0f7ff; padding:0; border-radius:0 !important;" data-nodeid="' + cid + '">';
+                    htmlStr += '<td data-depth="' + depth + '" data-nodeid="' + cid + '" style="' + persistentWidthStyle + ' vertical-align:top; border:1px solid #94a3b8; background:#f0f7ff; padding:6px; border-radius:0 !important;' + nodeColorStyle + '">';
+                    htmlStr += '<a class="sticky-content" style="cursor: pointer; background:var(--card-background,#f0f7ff); padding:0; border-radius:0 !important;" data-nodeid="' + cid + '">';
                     if (bc) htmlStr += bc;
                     if (hasChild || hasContent) htmlStr += '<button class="row-fold-btn" onclick="toggleChildRows(this)">▼</button>';
                     if (displayTitle) htmlStr += '<div class="note-title" style="font-size: 15px; margin-bottom: 4px;">' + renderInlineMarkdown(displayTitle) + '</div>';
@@ -2600,7 +2644,7 @@ JSB.newAddon = function (mainPath) {
                         htmlStr += '</td>';
                     } else {
                         var pTop = hasContent ? "6px" : "0px";
-                        htmlStr += '<td style="vertical-align:top; border:1px solid #94a3b8; padding:' + pTop + '; padding-bottom: 6px; background:white;">';
+                        htmlStr += '<td style="vertical-align:top; border:1px solid #94a3b8; padding:' + pTop + '; padding-bottom: 6px; background:white;' + nodeColorStyle + '">';
                         htmlStr += '<a class="sticky-content" style="cursor: pointer; position:static;" data-nodeid="' + cid + '">';
                         var savedImgStyle3 = "";
                         var epaint3 = getNodePicHash(n);
@@ -2650,12 +2694,13 @@ JSB.newAddon = function (mainPath) {
         for (var idx = 0; idx < rootNotes.length; idx++) {
             var rootNote = rootNotes[idx];
             var rootModel = getCardContentModel(rootNote);
+            var rootColorStyle = cardColorStyle(rootNote);
             var rootComments = getNoteComments(rootNote);
             var rootChildren = getNoteChildren(rootNote);
             var rawTitle = getExplicitNoteTitle(rootNote);
 
             if (rawTitle) {
-                html += '<div class="section-header">';
+                html += '<div class="section-header"' + (rootColorStyle === '--card-background:initial;' ? '' : ' style="' + rootColorStyle + '"') + '>';
                 // V3.2.2: Use <a> with data-nodeid to enable bi-link focusing
                 html += '<a data-nodeid="' + rootNote.noteId + '" style="cursor:pointer; color:inherit; text-decoration:none; display:inline-block; flex:1;">' + renderInlineMarkdown(rawTitle) + '</a>';
                 html += '<button class="fold-btn" onclick="toggleSection(this)">▼</button>';
@@ -2672,7 +2717,7 @@ JSB.newAddon = function (mainPath) {
             if (rootHasContent) {
                 // V3.2.2: Wrap content area in <a> for bi-link support
                 var rootBorderTop = rawTitle ? 'none' : '1px solid #94a3b8';
-                html += '<a data-nodeid="' + rootNote.noteId + '" style="display:block; text-decoration:none; color:inherit; padding: 10px 15px; margin-bottom: 2px; background: #fff; border: 1px solid #94a3b8; border-top: ' + rootBorderTop + '; border-radius: 0 !important;">';
+                html += '<a data-nodeid="' + rootNote.noteId + '" style="display:block; text-decoration:none; color:inherit; padding: 10px 15px; margin-bottom: 2px; background: #fff; border: 1px solid #94a3b8; border-top: ' + rootBorderTop + '; border-radius: 0 !important;' + rootColorStyle + '">';
 
                 var savedImgStyleRoot2 = "";
                 var epaintRoot2 = getNodePicHash(rootNote);
@@ -2691,6 +2736,7 @@ JSB.newAddon = function (mainPath) {
                 if (buildContext) buildContext.entering = false;
                 if (!n || depth > MAX_NOTE_TREE_DEPTH || isNoteInPath(n, path)) return '';
                 var nodeModel = getCardContentModel(n);
+                var nodeColorStyle = cardColorStyle(n);
                 if (!n || isNoteInPath(n, path)) return '';
                 var newPath = (path || []).slice();
                 newPath.push(n);
@@ -2742,7 +2788,7 @@ JSB.newAddon = function (mainPath) {
                 // 统一将标题和内容塞进同一个 td
                 var colSpanAttr = hasChild ? '' : ' colspan="2"';
                 // V5 Fix: use persistentWidthStyle (computed just above) instead of hardcoded relativePct
-                htmlStr += '<td data-depth="' + depth + '" data-nodeid="' + cid + '"' + colSpanAttr + ' style="' + persistentWidthStyle + ' vertical-align:top; border:1px solid #94a3b8; padding:6px; background:white;">';
+                htmlStr += '<td data-depth="' + depth + '" data-nodeid="' + cid + '"' + colSpanAttr + ' style="' + persistentWidthStyle + ' vertical-align:top; border:1px solid #94a3b8; padding:6px; background:white;' + nodeColorStyle + '">';
                 htmlStr += '<a class="sticky-content" style="cursor: pointer; position:static;" data-nodeid="' + cid + '">';
 
                 if (bc) htmlStr += bc;
@@ -2935,7 +2981,7 @@ JSB.newAddon = function (mainPath) {
         return JSON.parse(JSON.stringify({
             savedWidthMap: pe.savedWidthMap || {}, savedNodeWidthMap: pe.savedNodeWidthMap || {},
             savedImgHash: pe.savedImgHash || {}, savedImageMap: pe.savedImageMap || {},
-            isSyncWidth: pe.isSyncWidth !== false, showBreadcrumb: pe.showBreadcrumb !== false
+            isSyncWidth: pe.isSyncWidth !== false, showBreadcrumb: pe.showBreadcrumb !== false, isCardColorEnabled: pe.isCardColorEnabled !== false
         }));
     }
     function writeRenderDiagnostics(task, status) {
@@ -3172,15 +3218,16 @@ JSB.newAddon = function (mainPath) {
         if (pe.committedRenderState) {
             Object.keys(pe.committedRenderState).forEach(function (key) { pe[key] = pe.committedRenderState[key]; });
             if (pe.modeBtn) pe.modeBtn.setTitleForState(pe.tableMode === 'titlecontent' ? '标题模式' : '合并模式', 0);
+            if (pe.colorBtn) updateCardColorButton(pe.colorBtn, pe.isCardColorEnabled !== false);
         }
     }
     function panelRenderState(pe) {
         var state = {};
-        ['rootNotes','savedRootNoteIds','tableMode','isCompactMode','savedWidthMap','savedNodeWidthMap','savedImgHash','savedImageMap','isSyncWidth','showBreadcrumb','fontScale'].forEach(function (key) { state[key] = pe[key]; });
+        ['rootNotes','savedRootNoteIds','tableMode','isCompactMode','savedWidthMap','savedNodeWidthMap','savedImgHash','savedImageMap','isSyncWidth','showBreadcrumb','fontScale','isCardColorEnabled'].forEach(function (key) { state[key] = pe[key]; });
         return state;
     }
     function setRenderControls(pe, enabled) {
-        ['exportBtn','libSaveBtn','fontUpBtn','fontDownBtn','syncWBtn','bcBtn'].forEach(function (name) {
+        ['exportBtn','libSaveBtn','fontUpBtn','fontDownBtn','syncWBtn','bcBtn','colorBtn'].forEach(function (name) {
             if (pe[name]) pe[name].enabled = enabled;
         });
     }
@@ -3328,6 +3375,7 @@ JSB.newAddon = function (mainPath) {
             pe.savedWidthMap = item.savedWidthMap || {}; pe.savedNodeWidthMap = item.savedNodeWidthMap || {};
             pe.savedImgHash = item.savedImgHash || {}; pe.isCompactMode = true;
             pe.showBreadcrumb = item.showBreadcrumb !== false; pe.isSyncWidth = item.isSyncWidth !== false;
+            pe.isCardColorEnabled = item.isCardColorEnabled !== false;
             pe.titleLabel.text = '导出 ' + index + '/' + items.length + ' · ' + (item.name || '未命名');
             startPanelRender(pe, roots, function () {
                 if (stopped) return;
@@ -3339,7 +3387,7 @@ JSB.newAddon = function (mainPath) {
                     if (!styles && style) styles = style[0];
                     var body = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
                     var bodyHtml = namespaceExportIds(body ? body[1] : html, 'export-' + index + '-');
-                    bodies.push('<div' + (pe.showBreadcrumb === false ? ' class="hide-breadcrumb"' : '') + ' style="' + getFontScaleCssVariables(pe.fontScale) + ' margin-bottom:30px; page-break-after:always;"><h2>' + escapeHtml(item.name || '未命名') + '</h2>' + bodyHtml + '</div>');
+                    bodies.push('<div' + ' class="' + (pe.showBreadcrumb === false ? 'hide-breadcrumb ' : '') + (pe.isCardColorEnabled === false ? 'hide-card-colors' : '') + '"' + ' style="' + getFontScaleCssVariables(pe.fontScale) + ' margin-bottom:30px; page-break-after:always;"><h2>' + escapeHtml(item.name || '未命名') + '</h2>' + bodyHtml + '</div>');
                     NSTimer.scheduledTimerWithTimeInterval(0.01, false, next);
                 });
             });
@@ -3677,6 +3725,15 @@ JSB.newAddon = function (mainPath) {
         }
     }
 
+    function updateCardColorButton(button, enabled) {
+        button.setTitleForState("配色", 0);
+        button.backgroundColor = enabled ? UIColor.colorWithRedGreenBlueAlpha(0.90, 0.97, 0.94, 1) : UIColor.colorWithWhiteAlpha(0.93, 1);
+        button.setTitleColorForState(enabled ? UIColor.colorWithRedGreenBlueAlpha(0.12, 0.50, 0.35, 1) : UIColor.grayColor(), 0);
+        button.layer.cornerRadius = 6;
+        button.layer.borderWidth = 0.5;
+        button.layer.borderColor = UIColor.colorWithWhiteAlpha(0, 0.1);
+    }
+
     function showPanel(self, htmlStr) {
         var initialFontScale = normalizeTableFontScale(self.tableFontScale);
         htmlStr = applyFontScaleToHtml(htmlStr, initialFontScale);
@@ -3685,7 +3742,7 @@ JSB.newAddon = function (mainPath) {
         var containerView = studyController ? studyController.view : self.window;
         var frame = containerView.bounds;
 
-        var panelWidth = 650;
+        var panelWidth = 800; // Space for the full toolbar, including 配色.
         var panelHeight = 550;
 
         // Prevent NaN crashes by providing safe fallback dimensions
@@ -3831,6 +3888,17 @@ JSB.newAddon = function (mainPath) {
         fontDownBtn.addTargetActionForControlEvents(self, "onFontSmaller:", 1 << 6);
         pTitleBar.addSubview(fontDownBtn);
 
+        // Optional card colours. The two-character label stays stable; tint shows state.
+        var pColorBtn = UIButton.buttonWithType(0);
+        var colorW = 42;
+        currentX -= (gap + colorW);
+        pColorBtn.frame = { x: currentX, y: btnY, width: colorW, height: btnH };
+        pColorBtn.titleLabel.font = UIFont.systemFontOfSize(12);
+        pColorBtn.autoresizingMask = (1 << 0);
+        updateCardColorButton(pColorBtn, self.isCardColorEnabled !== false);
+        pColorBtn.addTargetActionForControlEvents(self, "onToggleCardColor:", 1 << 6);
+        pTitleBar.addSubview(pColorBtn);
+
         // 5. Breadcrumb Button
         var pBcBtn = UIButton.buttonWithType(0);
         var bcW = 54;
@@ -3963,6 +4031,7 @@ JSB.newAddon = function (mainPath) {
             titleLabel: pTitleLabel,
             modeBtn: pModeBtn,
             bcBtn: pBcBtn,
+            colorBtn: pColorBtn,
             linkBtn: pLinkBtn,
             syncWBtn: pSyncWBtn,
             minBtn: minBtn,
@@ -3986,6 +4055,7 @@ JSB.newAddon = function (mainPath) {
             savedImageMap: self.savedImageMap || {},
             isCompactMode: self.isCompactMode || false,
             showBreadcrumb: self.showBreadcrumb !== false,
+            isCardColorEnabled: self.isCardColorEnabled !== false,
             isLinked: self.isLinked !== false,
             isMinimized: false,
             savedFrame: null,
@@ -4360,6 +4430,7 @@ JSB.newAddon = function (mainPath) {
                 addon.savedImageMap = item.savedImageMap || {};
                 addon.savedImgHash = item.savedImgHash || {};
                 addon.tableFontScale = normalizeTableFontScale(item.fontScale);
+                addon.isCardColorEnabled = item.isCardColorEnabled !== false;
 
                 // Ensure rootNotes is populated for showPanel if needed
                 if (addon.savedRootNoteIds) {
@@ -4526,6 +4597,7 @@ JSB.newAddon = function (mainPath) {
                 self.tableMode = self.tableMode || "titlecontent";
                 self.isCompactMode = true; // V2.5.0: Always Compact
                 if (typeof self.showBreadcrumb === 'undefined') self.showBreadcrumb = false;
+                if (typeof self.isCardColorEnabled === 'undefined') self.isCardColorEnabled = true;
                 if (typeof self.isLinked === 'undefined') self.isLinked = true;
                 self.savedWidthMap = self.savedWidthMap || {};
                 self.savedNodeWidthMap = self.savedNodeWidthMap || {};
@@ -4734,6 +4806,7 @@ JSB.newAddon = function (mainPath) {
                             rootNoteIds: pe.savedRootNoteIds,
                             tableMode: pe.tableMode,
                             isSyncWidth: pe.isSyncWidth !== false,
+                            isCardColorEnabled: pe.isCardColorEnabled !== false,
                             savedWidthMap: pe.savedWidthMap || {},
                             savedNodeWidthMap: pe.savedNodeWidthMap || {},
                             savedImageMap: pe.savedImageMap || {},
@@ -4983,6 +5056,18 @@ JSB.newAddon = function (mainPath) {
                 );
             },
 
+
+            "onToggleCardColor": function (sender) {
+                var pe = findPanelEntryFromView(sender);
+                if (!pe || !pe.webView) return;
+                pe.isCardColorEnabled = pe.isCardColorEnabled === false;
+                self.isCardColorEnabled = pe.isCardColorEnabled;
+                if (pe.committedRenderState) pe.committedRenderState.isCardColorEnabled = pe.isCardColorEnabled;
+                updateCardColorButton(pe.colorBtn || sender, pe.isCardColorEnabled);
+                var script = pe.isCardColorEnabled ? "document.body.classList.remove('hide-card-colors');" : "document.body.classList.add('hide-card-colors');";
+                pe.webView.evaluateJavaScript(script, function () {});
+                Application.sharedInstance().showHUD(pe.isCardColorEnabled ? "配色已开启：按卡片色系显示浅色背景，导出和打印保留颜色" : "配色已关闭：表格使用普通背景，导出和打印同步关闭卡片配色", self.window, 3);
+            },
 
             "onToggleBreadcrumb": function (sender) {
                 var app = Application.sharedInstance();
