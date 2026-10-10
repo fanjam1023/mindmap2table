@@ -166,14 +166,14 @@ var MomoCardModel = (function () {
             safe('评论 ' + (index + 1), function () {
                 var type = String(api.field(comment, 'type') || '').toLowerCase();
                 var direct = type === 'linknote' ? api.field(comment, 'q_htext') : api.field(comment, 'text');
-                var blank = api.blank(comment), target = null;
-                if (blank && direct && String(direct).trim()) { text(direct, source); return; }
+                var blank = api.blank(comment), preferText = type === 'linknote' && api.textFirst(comment), target = null;
+                if ((blank || preferText) && direct && String(direct).trim()) { text(direct, source); return; }
                 var paint = api.commentHash(comment);
                 // Only resolve an associated card when its own payload is needed.
-                if (type === 'linknote' && api.field(comment, 'noteid') && (blank || !paint) && (!direct || !String(direct).trim())) target = api.lookup(api.field(comment, 'noteid'));
+                if (type === 'linknote' && api.field(comment, 'noteid') && (blank || preferText || !paint) && (!direct || !String(direct).trim())) target = api.lookup(api.field(comment, 'noteid'));
                 blank = blank || api.blank(target);
-                if (!direct && target) direct = api.field(target, 'excerptText');
-                if (blank || (target && api.textFirst(target))) {
+                if ((!direct || !String(direct).trim()) && target) direct = api.field(target, 'excerptText');
+                if (blank || preferText || (target && api.textFirst(target))) {
                     if (direct && String(direct).trim()) { text(direct, source); return; }
                     if (blank) { model.warnings.push('留白卡片内容无法读取'); return; }
                 }
@@ -2255,7 +2255,10 @@ JSB.newAddon = function (mainPath) {
     // BUNDLED_CARD_NATIVE_ADAPTER_START
     function cardReadApi() { return {
                 field: cardField, title: function (note) { return getExplicitNoteTitle(note.__baseNote || note.__nativeNote || note); }, comments: getNoteComments,
-                blank: hasBlankHighlightMarker, textFirst: isTextFirst, hash: getNodePicHash,
+                blank: hasBlankHighlightMarker, textFirst: function (note) {
+                    var value = cardField(note, 'textFirst');
+                    return value === true || Number(value) === 1;
+                }, hash: getNodePicHash,
                 drawing: noteHasDrawingData, hasMedia: noteHasImagePayloadForRender,
                 sketch: resolveSketchNote, html: getMNContentHtml, aggregate: getAggregatedNoteText,
                 commentHash: getCommentPaint, lookup: function (id) {

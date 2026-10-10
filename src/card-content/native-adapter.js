@@ -1,6 +1,9 @@
     function cardReadApi() { return {
                 field: cardField, title: function (note) { return getExplicitNoteTitle(note.__baseNote || note.__nativeNote || note); }, comments: getNoteComments,
-                blank: hasBlankHighlightMarker, textFirst: isTextFirst, hash: getNodePicHash,
+                blank: hasBlankHighlightMarker, textFirst: function (note) {
+                    var value = cardField(note, 'textFirst');
+                    return value === true || Number(value) === 1;
+                }, hash: getNodePicHash,
                 drawing: noteHasDrawingData, hasMedia: noteHasImagePayloadForRender,
                 sketch: resolveSketchNote, html: getMNContentHtml, aggregate: getAggregatedNoteText,
                 commentHash: getCommentPaint, lookup: function (id) {
